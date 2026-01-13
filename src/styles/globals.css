@@ -189,3 +189,18 @@
 html {
   font-size: var(--font-size);
 }
+
+/* Mobile Bottom Navigation - show only below 440px breakpoint */
+.mobile-bottom-nav {
+  display: none;
+}
+
+@media (max-width: 440px) {
+  .mobile-bottom-nav {
+    display: block;
+  }
+  
+  body {
+    padding-bottom: 4rem; /* 64px for nav height */
+  }
+}

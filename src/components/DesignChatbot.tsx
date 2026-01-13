@@ -414,7 +414,7 @@ export function DesignChatbot({ onAddToCart }: DesignChatbotProps) {
                           <div className="flex justify-between items-center bg-white rounded-lg p-3 border border-stone-200">
                             <div>
                               <p className="text-sm">
-                                {message.products.length} items • ${message.products.reduce((sum, p) => sum + p.price, 0).toLocaleString()}
+                                {message.products.length} items • B${message.products.reduce((sum, p) => sum + p.price, 0).toLocaleString()}
                               </p>
                             </div>
                             <Button
@@ -442,7 +442,7 @@ export function DesignChatbot({ onAddToCart }: DesignChatbotProps) {
                               <div className="flex-1 min-w-0">
                                 <h4 className="text-sm mb-1 truncate">{product.name}</h4>
                                 <Badge variant="outline" className="text-xs mb-2">{product.category}</Badge>
-                                <p className="font-semibold text-sm">${product.price.toLocaleString()}</p>
+                                <p className="font-semibold text-sm">B${product.price.toLocaleString()}</p>
                               </div>
                               <Button
                                 size="sm"

@@ -1,4 +1,4 @@
-import { ShoppingCart, Menu, User, LogOut, Settings, Heart, X, ChevronDown, ArrowRight, Play, Globe } from "lucide-react";
+import { ShoppingCart, Menu, User, LogOut, Settings, Heart, X, ChevronDown, ArrowRight, Play, Globe, Shield } from "lucide-react";
 import { Button } from "./ui/button";
 import {
   DropdownMenu,
@@ -25,9 +25,10 @@ interface HeaderProps {
   onNavigateHome?: () => void;
   cartItemCount?: number;
   onCartClick?: () => void;
+  onAdminClick?: () => void;
 }
 
-export function Header({ user, onSignInClick, onSignOut, onViewAccount, onNavigateHome, cartItemCount = 0, onCartClick }: HeaderProps) {
+export function Header({ user, onSignInClick, onSignOut, onViewAccount, onNavigateHome, cartItemCount = 0, onCartClick, onAdminClick }: HeaderProps) {
   const { language, setLanguage, t } = useLanguage();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -433,6 +434,21 @@ export function Header({ user, onSignInClick, onSignOut, onViewAccount, onNaviga
               </span>
             )}
           </Button>
+
+          {/* Admin Login Button */}
+          {onAdminClick && (
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className={`${
+                isScrolled ? "" : "text-white hover:bg-white/10"
+              }`}
+              onClick={onAdminClick}
+              title="Admin Dashboard"
+            >
+              <Shield className="h-5 w-5" />
+            </Button>
+          )}
 
           {user ? (
             <DropdownMenu>

@@ -1,10 +1,14 @@
+import { useState, useEffect, useRef } from "react";
 import { ShoppingCart, Heart, Eye, Star, Check } from "lucide-react";
 import { Button } from "./ui/button";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 import { Badge } from "./ui/badge";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "./ui/dialog";
-import { useState } from "react";
 import { toast } from "sonner@2.0.3";
+import { trackProductView } from "../utils/journey-tracker";
+import { projectId, publicAnonKey } from "../utils/supabase/info";
+
+const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-3cbf86a5`;
 
 interface ProductVariant {
   color: string;
@@ -19,6 +23,7 @@ interface ProductSize {
 }
 
 interface ProductCardProps {
+  id?: number;
   name: string;
   price: number;
   image: string;
@@ -30,6 +35,7 @@ interface ProductCardProps {
   variants?: ProductVariant[];
   sizes?: ProductSize[];
   inStock?: boolean;
+  user?: { name: string; email: string; userId?: string } | null;
   onAddToCart?: (options: {
     variant?: ProductVariant;
     size?: ProductSize;
@@ -38,6 +44,7 @@ interface ProductCardProps {
 }
 
 export function ProductCard({
+  id,
   name,
   price,
   image,
@@ -49,6 +56,7 @@ export function ProductCard({
   variants = [],
   sizes = [],
   inStock = true,
+  user,
   onAddToCart,
 }: ProductCardProps) {
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | undefined>(
@@ -60,11 +68,53 @@ export function ProductCard({
   const [quantity, setQuantity] = useState(1);
   const [isQuickViewOpen, setIsQuickViewOpen] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
+  const [isLoadingFavorite, setIsLoadingFavorite] = useState(false);
 
   const finalPrice = selectedSize?.priceAdjustment
     ? price + selectedSize.priceAdjustment
     : price;
   const discountedPrice = discount ? finalPrice * (1 - discount / 100) : finalPrice;
+
+  // Check if product is already favorited on mount
+  useEffect(() => {
+    const checkFavoriteStatus = async () => {
+      if (!user?.userId || !id) {
+        console.log('⏭️ Skipping favorite check:', { hasUser: !!user, userId: user?.userId, productId: id });
+        return;
+      }
+      
+      console.log('🔍 Checking favorite status for product:', { userId: user.userId, productId: id, productName: name });
+      
+      try {
+        const response = await fetch(`${API_BASE}/favorites/${user.userId}`, {
+          headers: {
+            Authorization: `Bearer ${publicAnonKey}`
+          }
+        });
+        
+        console.log('📥 Favorites check response:', { 
+          ok: response.ok, 
+          status: response.status 
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          console.log('📦 User favorites data:', { 
+            favoritesCount: data.favorites?.length || 0,
+            favoriteIds: data.favorites?.map((f: any) => f.productId) || []
+          });
+          
+          const isFav = data.favorites?.some((fav: any) => fav.productId === String(id));
+          console.log(`${isFav ? '❤️' : '🤍'} Product ${id} is ${isFav ? 'FAVORITED' : 'NOT favorited'}`);
+          setIsFavorite(isFav);
+        }
+      } catch (error) {
+        console.error('❌ Error checking favorite status:', error);
+      }
+    };
+    
+    checkFavoriteStatus();
+  }, [user?.userId, id]);
 
   const handleAddToCart = () => {
     if (!inStock) {
@@ -79,10 +129,75 @@ export function ProductCard({
     });
   };
 
-  const toggleFavorite = () => {
-    setIsFavorite(!isFavorite);
-    toast.success(isFavorite ? "Removed from favorites" : "Added to favorites");
+  const toggleFavorite = async () => {
+    // If user is not logged in, prompt them to sign in
+    if (!user?.userId || !id) {
+      console.log('❌ Favorites error - Missing data:', { 
+        hasUser: !!user, 
+        userId: user?.userId, 
+        productId: id 
+      });
+      toast.error("Please sign in to save favorites");
+      return;
+    }
+    
+    console.log('🔄 Toggling favorite:', { 
+      userId: user.userId, 
+      productId: id, 
+      productName: name,
+      currentState: isFavorite ? 'REMOVING' : 'ADDING'
+    });
+    
+    setIsLoadingFavorite(true);
+    
+    try {
+      const endpoint = `${API_BASE}/favorites`;
+      const method = isFavorite ? 'DELETE' : 'POST';
+      const body = isFavorite 
+        ? { userId: user.userId, productId: String(id) }
+        : { 
+            userId: user.userId, 
+            productId: String(id),
+            productName: name,
+            price,
+            image,
+            category
+          };
+      
+      console.log('📤 Sending request:', { endpoint, method, body });
+      
+      const response = await fetch(endpoint, {
+        method,
+        headers: {
+          Authorization: `Bearer ${publicAnonKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+      });
+      
+      const responseData = await response.json();
+      console.log('📥 Response:', { ok: response.ok, status: response.status, data: responseData });
+      
+      if (response.ok) {
+        setIsFavorite(!isFavorite);
+        toast.success(isFavorite ? "Removed from favorites" : "Added to favorites");
+        console.log(isFavorite ? '💔 Removed from favorites:' : '❤️ Added to favorites:', name);
+      } else {
+        throw new Error(responseData.error || 'Failed to update favorites');
+      }
+    } catch (error) {
+      console.error('❌ Error updating favorite status:', error);
+      toast.error("Failed to update favorite status");
+    } finally {
+      setIsLoadingFavorite(false);
+    }
   };
+
+  useEffect(() => {
+    if (isQuickViewOpen && id) {
+      trackProductView(String(id), name, price);
+    }
+  }, [isQuickViewOpen, id, name, price]);
 
   return (
     <>
@@ -119,19 +234,22 @@ export function ProductCard({
           </div>
 
           {/* Quick Actions */}
-          <div className="absolute top-4 right-4 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="absolute top-4 right-4 flex flex-col gap-2 transition-opacity">
             <Button
               size="icon"
               variant="secondary"
-              className="h-10 w-10 rounded-full shadow-lg"
+              className={`h-10 w-10 rounded-full shadow-lg transition-all ${
+                isFavorite ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+              }`}
               onClick={toggleFavorite}
+              disabled={isLoadingFavorite}
             >
               <Heart className={`h-4 w-4 ${isFavorite ? "fill-red-500 text-red-500" : ""}`} />
             </Button>
             <Button
               size="icon"
               variant="secondary"
-              className="h-10 w-10 rounded-full shadow-lg"
+              className="h-10 w-10 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
               onClick={() => setIsQuickViewOpen(true)}
             >
               <Eye className="h-4 w-4" />
@@ -175,15 +293,15 @@ export function ProductCard({
               {discount && discount > 0 ? (
                 <>
                   <p className="text-lg">
-                    ${discountedPrice.toLocaleString()}
+                    B${discountedPrice.toLocaleString()}
                   </p>
                   <p className="text-sm text-muted-foreground line-through">
-                    ${finalPrice.toLocaleString()}
+                    B${finalPrice.toLocaleString()}
                   </p>
                 </>
               ) : (
                 <p className="text-muted-foreground text-lg">
-                  ${finalPrice.toLocaleString()}
+                  B${finalPrice.toLocaleString()}
                 </p>
               )}
             </div>
@@ -304,14 +422,14 @@ export function ProductCard({
               <div className="flex items-baseline gap-3">
                 {discount && discount > 0 ? (
                   <>
-                    <p className="text-3xl">${discountedPrice.toLocaleString()}</p>
+                    <p className="text-3xl">B${discountedPrice.toLocaleString()}</p>
                     <p className="text-xl text-muted-foreground line-through">
-                      ${finalPrice.toLocaleString()}
+                      B${finalPrice.toLocaleString()}
                     </p>
                     <Badge className="bg-red-500 text-white">-{discount}%</Badge>
                   </>
                 ) : (
-                  <p className="text-3xl">${finalPrice.toLocaleString()}</p>
+                  <p className="text-3xl">B${finalPrice.toLocaleString()}</p>
                 )}
               </div>
 
@@ -444,6 +562,7 @@ export function ProductCard({
                   variant="outline"
                   className="h-12 w-12 rounded-full"
                   onClick={toggleFavorite}
+                  disabled={isLoadingFavorite}
                 >
                   <Heart
                     className={`h-5 w-5 ${isFavorite ? "fill-red-500 text-red-500" : ""}`}

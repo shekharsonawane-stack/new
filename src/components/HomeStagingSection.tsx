@@ -273,7 +273,13 @@ const stagingPackages: StagingPackage[] = [
 ];
 
 interface HomeStagingSectionProps {
-  onAddToCart?: (packageId: number) => void;
+  onAddToCart?: (product: { 
+    id: number; 
+    name: string; 
+    price: number; 
+    image: string; 
+    category: string;
+  }) => void;
 }
 
 export function HomeStagingSection({ onAddToCart }: HomeStagingSectionProps) {
@@ -349,6 +355,22 @@ export function HomeStagingSection({ onAddToCart }: HomeStagingSectionProps) {
     }, 0);
   };
 
+  const handleAddPackageToCart = () => {
+    if (!onAddToCart) return;
+    
+    // Add the package as a single item with all included furniture listed
+    const packageItem = {
+      id: selectedPackage.id + 10000, // Offset ID to avoid conflicts with individual furniture
+      name: selectedPackage.name,
+      price: selectedPackage.price,
+      image: selectedPackage.image,
+      category: 'Home Staging Package'
+    };
+    
+    onAddToCart(packageItem);
+    toast.success(`${selectedPackage.name} added to cart!`);
+  };
+
   const handleAddAllToCart = () => {
     if (!selectedRoom) return;
     const furnitureList = furnitureByRoom[selectedRoom] || [];
@@ -360,6 +382,23 @@ export function HomeStagingSection({ onAddToCart }: HomeStagingSectionProps) {
     if (itemsToAdd.length === 0) {
       toast.error("Please select at least one furniture item");
       return;
+    }
+
+    // Add each furniture item to cart
+    if (onAddToCart) {
+      itemsToAdd.forEach(({ item, config }) => {
+        if (item) {
+          for (let i = 0; i < config.quantity; i++) {
+            onAddToCart({
+              id: item.id,
+              name: item.name,
+              price: item.price,
+              image: item.image,
+              category: selectedRoom || 'Home Staging'
+            });
+          }
+        }
+      });
     }
 
     toast.success(`Added ${itemsToAdd.length} customized ${itemsToAdd.length === 1 ? 'item' : 'items'} to cart!`);
@@ -664,7 +703,7 @@ export function HomeStagingSection({ onAddToCart }: HomeStagingSectionProps) {
                 <Button 
                   size="lg" 
                   className="gap-2 rounded-full h-14 px-10 bg-white text-stone-900 hover:bg-white/90"
-                  onClick={() => onAddToCart?.(selectedPackage.id)}
+                  onClick={handleAddPackageToCart}
                 >
                   Add Package to Cart
                   <ArrowRight className="h-5 w-5" />

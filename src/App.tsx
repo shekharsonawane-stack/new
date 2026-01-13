@@ -1,15 +1,18 @@
 import { Header } from "./components/Header";
+import { MobileBottomNav } from "./components/MobileBottomNav";
 import { BeforeAfterSlider } from "./components/BeforeAfterSlider";
 import { ProductCard } from "./components/ProductCard";
 import { TestimonialCard } from "./components/TestimonialCard";
 import { RoomIdeaTile } from "./components/RoomIdeaTile";
 import { DesignGallery } from "./components/DesignGallery";
+import { DesignStyleCard } from "./components/DesignStyleCard";
 import { HomeStagingSection } from "./components/HomeStagingSection";
 import { ProjectGallery } from "./components/ProjectGallery";
 import { Footer } from "./components/Footer";
 import { SignInDialog } from "./components/SignInDialog";
 import { RoomQuestionnaire, RoomPreferences } from "./components/RoomQuestionnaire";
 import { AccountDashboard } from "./components/AccountDashboard";
+import { CRMDashboard } from "./components/CRMDashboard";
 import { CheckoutFlow, CartItem } from "./components/CheckoutFlow";
 import { DesignChatbot } from "./components/DesignChatbot";
 import { AboutPage } from "./components/AboutPage";
@@ -18,15 +21,24 @@ import { ServicesPage } from "./components/ServicesPage";
 import { ContactPage } from "./components/ContactPage";
 import { TermsPage } from "./components/TermsPage";
 import { PrivacyPage } from "./components/PrivacyPage";
+import { AdminAccess } from "./components/AdminAccess";
+import { SupabaseConnectionStatus } from "./components/SupabaseConnectionStatus";
+import { SupabaseDiagnostics } from "./components/SupabaseDiagnostics";
+import { CRMDataSyncChecker } from "./components/CRMDataSyncChecker";
+import { CampaignPopup } from "./components/CampaignPopup";
+import { SurveyDisplay } from "./components/SurveyDisplay";
 import { LanguageProvider, useLanguage } from "./contexts/LanguageContext";
 import { ImageWithFallback } from "./components/figma/ImageWithFallback";
-import { ArrowRight, Sparkles, Edit3, Truck, Play, X, RefreshCw, ChevronDown } from "lucide-react";
+import { ArrowRight, Sparkles, Edit3, Truck, Play, X, RefreshCw, ChevronDown, Database } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Dialog, DialogContent, DialogClose, DialogTitle, DialogDescription } from "./components/ui/dialog";
 import { Toaster } from "./components/ui/sonner";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./components/ui/accordion";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner@2.0.3";
+import { seedCRMData } from "./utils/crm-seed-data";
+import { captureAbandonedCartLead } from "./utils/crm-helpers";
+import { initJourneyTracking, trackPageView, trackProductView, trackAddToCart, trackRemoveFromCart, trackCartCleared, trackCartAbandoned } from "./utils/journey-tracker";
 
 // Using Unsplash images for feature cards and logo watermark
 const logoIcon = "https://images.unsplash.com/photo-1748629761551-37b2a96df328?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxmdXJuaXR1cmUlMjBpY29uJTIwbW9kZXJufGVufDF8fHx8MTc2NzMxNTcwNHww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral";
@@ -119,6 +131,37 @@ const roomIdeas = [
     ],
     totalPrice: 5594,
   },
+];
+
+const designStyles = [
+  {
+    id: "modern",
+    name: "Modern",
+    description: "Clean lines, neutral palettes, and functional design. Embrace simplicity with sleek furniture and uncluttered spaces that exude contemporary elegance.",
+    image: "https://images.unsplash.com/photo-1763565909003-46e9dfb68a00?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBtaW5pbWFsaXN0JTIwZnVybml0dXJlfGVufDF8fHx8MTc2ODI3MjU3N3ww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
+    features: ["Minimalist", "Sleek Lines", "Neutral Tones", "Functional"]
+  },
+  {
+    id: "scandinavian",
+    name: "Scandinavian",
+    description: "Light woods, cozy textiles, and airy spaces. Experience hygge with warm, inviting interiors that balance simplicity and comfort perfectly.",
+    image: "https://images.unsplash.com/photo-1693621947607-8de05ee2f544?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzY2FuZGluYXZpYW4lMjBmdXJuaXR1cmUlMjBpbnRlcmlvcnxlbnwxfHx8fDE3NjgyNzI1Nzh8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
+    features: ["Light Wood", "Cozy", "Natural Light", "Hygge"]
+  },
+  {
+    id: "industrial",
+    name: "Industrial",
+    description: "Exposed materials, metal accents, and raw textures. Channel urban loft vibes with bold, edgy pieces that celebrate authentic craftsmanship.",
+    image: "https://images.unsplash.com/photo-1696420691256-b325ec3ec3a1?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxpbmR1c3RyaWFsJTIwZnVybml0dXJlJTIwbG9mdHxlbnwxfHx8fDE3NjgyNzI1Nzh8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
+    features: ["Metal & Wood", "Exposed Brick", "Urban Loft", "Raw Materials"]
+  },
+  {
+    id: "bohemian",
+    name: "Bohemian",
+    description: "Eclectic patterns, vibrant colors, and global influences. Create a free-spirited sanctuary with layered textures and artistic expression.",
+    image: "https://images.unsplash.com/photo-1722268994698-b85790171832?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxib2hlbWlhbiUyMGZ1cm5pdHVyZSUyMGRlY29yfGVufDF8fHx8MTc2ODI3MjU3OHww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
+    features: ["Colorful", "Eclectic", "Layered Textures", "Artistic"]
+  }
 ];
 
 const products = [
@@ -304,17 +347,93 @@ function MainApp() {
   const [isVideoOpen, setIsVideoOpen] = useState(false);
   const [isSignInOpen, setIsSignInOpen] = useState(false);
   const [isQuestionnaireOpen, setIsQuestionnaireOpen] = useState(false);
-  const [currentView, setCurrentView] = useState<"home" | "account" | "checkout" | "about" | "faq" | "services" | "contact" | "terms" | "privacy">("home");
-  const [user, setUser] = useState<{ name: string; email: string } | null>(null);
+  const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState(false);
+  const [isSyncCheckerOpen, setIsSyncCheckerOpen] = useState(false);
+  const [currentView, setCurrentView] = useState<"home" | "account" | "checkout" | "about" | "faq" | "services" | "contact" | "terms" | "privacy" | "crm">("home");
+  const [user, setUser] = useState<{ name: string; email: string; userId?: string } | null>(null);
   const [userPreferences, setUserPreferences] = useState<RoomPreferences | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
+  const abandonedCartTrackedRef = useRef(false);
 
-  const handleSignIn = (userData: { name: string; email: string }) => {
+  // Initialize journey tracking
+  useEffect(() => {
+    initJourneyTracking();
+  }, []);
+
+  // Track page view changes
+  useEffect(() => {
+    trackPageView(currentView);
+  }, [currentView]);
+
+  // Track abandoned cart - capture lead when user has items but doesn't complete checkout
+  useEffect(() => {
+    if (cart.length === 0) {
+      abandonedCartTrackedRef.current = false;
+      console.log("🛒 Cart is empty, resetting abandoned cart tracker");
+      return;
+    }
+
+    console.log("🛒 Starting abandoned cart timer... (10 seconds)");
+    console.log("🛒 Current cart:", cart.map(item => ({ name: item.name, qty: item.quantity })));
+    
+    // Set a timer for 10 seconds of inactivity
+    const abandonmentTimer = setTimeout(() => {
+      if (cart.length > 0 && !abandonedCartTrackedRef.current) {
+        const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+        
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        console.log("🛒💔 ABANDONED CART DETECTED!");
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        console.log("📦 Cart items:", cart.length);
+        console.log("💰 Total value: B$" + cartTotal);
+        console.log("🛍️ Items:", cart.map(item => `${item.name} (${item.quantity}x)`));
+        
+        // Track abandoned cart analytics (always track, even for non-logged-in users)
+        trackCartAbandoned(cart.length, cartTotal, cart);
+        abandonedCartTrackedRef.current = true;
+        console.log("✅ Abandoned cart event tracked in analytics system");
+        
+        // Capture lead only if user is logged in
+        if (user?.email) {
+          console.log("👤 User logged in, capturing abandoned cart lead...");
+          captureAbandonedCartLead({
+            email: user.email,
+            name: user.name,
+            cartItems: cart,
+            cartTotal: cartTotal,
+          }).then(result => {
+            if (result.success) {
+              console.log("✅ Abandoned cart lead captured in CRM system");
+              console.log("📧 Lead saved for:", user.email);
+            } else {
+              console.error("❌ Failed to capture abandoned cart lead:", result);
+            }
+          });
+        } else {
+          console.log("ℹ️ User not logged in, skipping CRM lead capture (analytics still tracked)");
+        }
+        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      }
+    }, 10 * 1000); // 10 seconds for testing (change to 5 * 60 * 1000 for production)
+
+    return () => {
+      console.log("🛒 Clearing abandoned cart timer");
+      clearTimeout(abandonmentTimer);
+    };
+  }, [cart, user]);
+
+  const handleSignIn = (userData: { name: string; email: string; userId?: string }) => {
     setUser(userData);
     setIsSignInOpen(false);
-    // Show questionnaire after sign-in
-    setIsQuestionnaireOpen(true);
-    toast.success(`Welcome back, ${userData.name}!`);
+    
+    // Show questionnaire only for first-time users who haven't completed it before
+    if (userData.userId) {
+      const hasCompletedQuestionnaire = localStorage.getItem(`questionnaire_completed_${userData.email}`);
+      if (!hasCompletedQuestionnaire) {
+        setIsQuestionnaireOpen(true);
+      }
+    }
+    // Don't show duplicate toast since SignInDialog already shows one
   };
 
   const handleSignOut = () => {
@@ -326,6 +445,12 @@ function MainApp() {
 
   const handleQuestionnaireComplete = (preferences: RoomPreferences) => {
     setUserPreferences(preferences);
+    
+    // Mark questionnaire as completed for this user
+    if (user?.email) {
+      localStorage.setItem(`questionnaire_completed_${user.email}`, 'true');
+    }
+    
     toast.success("Your preferences have been saved! We'll personalize your experience.");
   };
 
@@ -337,11 +462,46 @@ function MainApp() {
     }
   };
 
-  const handleAddToCart = (product: typeof products[0], options?: {
-    variant?: { color: string; colorHex: string; material?: string };
-    size?: { label: string; dimensions?: string; priceAdjustment?: number };
-    quantity?: number;
-  }) => {
+  const handleViewProducts = () => {
+    const productsSection = document.getElementById('products');
+    if (productsSection) {
+      productsSection.scrollIntoView({ behavior: 'smooth' });
+    }
+    if (currentView !== "home") {
+      setCurrentView("home");
+      setTimeout(() => {
+        const productsSection = document.getElementById('products');
+        if (productsSection) {
+          productsSection.scrollIntoView({ behavior: 'smooth' });
+        }
+      }, 100);
+    }
+  };
+
+  const handleViewCustomize = () => {
+    const customizeSection = document.getElementById('customize-room-selection');
+    if (customizeSection) {
+      customizeSection.scrollIntoView({ behavior: 'smooth' });
+    }
+    if (currentView !== "home") {
+      setCurrentView("home");
+      setTimeout(() => {
+        const customizeSection = document.getElementById('customize-room-selection');
+        if (customizeSection) {
+          customizeSection.scrollIntoView({ behavior: 'smooth' });
+        }
+      }, 100);
+    }
+  };
+
+  const handleAddToCart = (
+    product: typeof products[0] | { id: number; name: string; price: number; image: string; category: string }, 
+    options?: {
+      variant?: { color: string; colorHex: string; material?: string };
+      size?: { label: string; dimensions?: string; priceAdjustment?: number };
+      quantity?: number;
+    }
+  ) => {
     const quantity = options?.quantity || 1;
     const finalPrice = options?.size?.priceAdjustment
       ? product.price + options.size.priceAdjustment
@@ -352,6 +512,11 @@ function MainApp() {
       options?.variant?.color,
       options?.size?.label
     ].filter(Boolean).join(" - ");
+    
+    console.log(`🛒 Adding to cart: ${productName} (ID: ${product.id}, Price: $${finalPrice}, Qty: ${quantity})`);
+    
+    // Track add to cart event
+    trackAddToCart(product.id.toString(), productName, finalPrice, quantity);
     
     const existingItem = cart.find(item => 
       item.id === product.id && 
@@ -388,8 +553,45 @@ function MainApp() {
 
   const handleCheckoutComplete = (orderNumber: string) => {
     setCart([]);
+    abandonedCartTrackedRef.current = false; // Reset tracking on successful checkout
     setCurrentView("account");
     toast.success(`Order ${orderNumber} placed successfully!`);
+  };
+
+  const handleCheckoutClose = () => {
+    // Track abandoned cart when user closes checkout with items still in cart
+    if (cart.length > 0 && !abandonedCartTrackedRef.current) {
+      const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      console.log("🚪 User closed checkout - tracking abandonment");
+      console.log("📦 Cart items:", cart.length);
+      console.log("💰 Total value: B$" + cartTotal);
+      
+      // Track abandoned cart analytics (always track, even for non-logged-in users)
+      trackCartAbandoned(cart.length, cartTotal, cart);
+      abandonedCartTrackedRef.current = true;
+      console.log("✅ Abandoned cart tracked immediately (user closed checkout)");
+      
+      // Capture lead only if user is logged in
+      if (user?.email) {
+        console.log("👤 User logged in, capturing abandoned cart lead...");
+        captureAbandonedCartLead({
+          email: user.email,
+          name: user.name,
+          cartItems: cart,
+          cartTotal: cartTotal,
+        }).then(result => {
+          if (result.success) {
+            console.log("✅ Abandoned cart lead captured in CRM");
+          } else {
+            console.error("❌ Failed to capture lead:", result);
+          }
+        });
+      }
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    }
+    setCurrentView("home");
   };
 
   const handleShopTheLook = () => {
@@ -436,8 +638,75 @@ function MainApp() {
 
   const handleClearCart = () => {
     const itemCount = cart.length;
+    const cartTotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    
+    // Track cart clearing
+    trackCartCleared(itemCount, cartTotal);
+    
     setCart([]);
+    abandonedCartTrackedRef.current = false; // Reset abandoned cart tracking
     toast.success(`Cleared ${itemCount} ${itemCount === 1 ? 'item' : 'items'} from cart`);
+  };
+
+  const handleRemoveFromCart = (itemId: number, itemName: string) => {
+    const itemToRemove = cart.find(item => item.id === itemId && item.name === itemName);
+    
+    if (itemToRemove) {
+      // Track removal
+      trackRemoveFromCart(
+        itemId.toString(), 
+        itemName, 
+        itemToRemove.price, 
+        itemToRemove.quantity
+      );
+      
+      // Remove from cart
+      setCart(cart.filter(item => !(item.id === itemId && item.name === itemName)));
+      toast.success(`Removed ${itemName} from cart`);
+    }
+  };
+
+  const handleAddRoomPackage = (roomId: number) => {
+    const roomPackage = roomIdeas.find(room => room.id === roomId);
+    if (!roomPackage) {
+      toast.error("Room package not found");
+      return;
+    }
+
+    // Add the package as a single bundle item
+    const packageItem = {
+      id: roomPackage.id + 20000, // Offset ID to avoid conflicts
+      name: `${roomPackage.name} - Complete Set`,
+      price: roomPackage.totalPrice,
+      image: roomPackage.image,
+      category: 'Room Package'
+    };
+
+    console.log(`🛒 Adding room package to cart: ${packageItem.name} (ID: ${packageItem.id}, Price: B$${packageItem.price})`);
+
+    // Track add to cart event
+    trackAddToCart(packageItem.id.toString(), packageItem.name, packageItem.price, 1);
+
+    const existingItem = cart.find(item => item.id === packageItem.id);
+    
+    if (existingItem) {
+      setCart(cart.map(item =>
+        item.id === packageItem.id
+          ? { ...item, quantity: item.quantity + 1 }
+          : item
+      ));
+      toast.success(`Added another ${packageItem.name} to cart`);
+    } else {
+      setCart([...cart, {
+        id: packageItem.id,
+        name: packageItem.name,
+        price: packageItem.price,
+        quantity: 1,
+        image: packageItem.image,
+        category: packageItem.category
+      }]);
+      toast.success(`${packageItem.name} added to cart!`);
+    }
   };
 
   const handleShopDesignStyle = (designId: number) => {
@@ -575,18 +844,22 @@ function MainApp() {
           onNavigateHome={() => setCurrentView("home")}
           cartItemCount={cart.length}
           onCartClick={handleViewCart}
+          onAdminClick={() => setCurrentView("crm")}
         />
       
       {currentView === "checkout" ? (
         <CheckoutFlow
           cartItems={cart}
           onCheckoutComplete={handleCheckoutComplete}
-          onClose={() => setCurrentView("home")}
+          onClose={handleCheckoutClose}
           user={user}
           onClearCart={handleClearCart}
+          onRemoveFromCart={handleRemoveFromCart}
         />
       ) : currentView === "account" && user ? (
         <AccountDashboard user={user} />
+      ) : currentView === "crm" ? (
+        <CRMDashboard />
       ) : currentView === "about" ? (
         <AboutPage />
       ) : currentView === "faq" ? (
@@ -745,6 +1018,46 @@ function MainApp() {
         {/* Design Gallery - Lookbook Style */}
         <DesignGallery onShopTheLook={handleShopDesignStyle} />
 
+        {/* Design & Inspiration Section - Design Styles */}
+        <section className="relative bg-stone-50 py-24 md:py-32 overflow-hidden">
+          <div 
+            className="absolute inset-0 opacity-[0.02] pointer-events-none"
+            style={{
+              backgroundImage: `url(${logoIcon})`,
+              backgroundRepeat: 'no-repeat',
+              backgroundPosition: 'center',
+              backgroundSize: '60%',
+              filter: 'grayscale(100%)'
+            }}
+          />
+          <div className="container mx-auto px-6 lg:px-8 relative z-10">
+            <div className="mb-16 text-center max-w-3xl mx-auto">
+              <h1 className="mb-4 text-[48px]">Design & Inspiration</h1>
+              <p className="text-muted-foreground text-lg text-[20px]">
+                Discover your perfect style. Explore curated design aesthetics that speak to your personality and transform your space.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+              {designStyles.map((style) => (
+                <DesignStyleCard
+                  key={style.id}
+                  id={style.id}
+                  name={style.name}
+                  description={style.description}
+                  image={style.image}
+                  features={style.features}
+                  onExplore={() => {
+                    toast.success(`Exploring ${style.name} style!`);
+                    // Scroll to products section
+                    document.getElementById('featured-products')?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        </section>
+
         {/* Room Ideas Section */}
         <section id="room-ideas" className="relative bg-white py-24 md:py-32 overflow-hidden">
           <div 
@@ -774,6 +1087,7 @@ function MainApp() {
                   image={room.image}
                   items={room.items}
                   totalPrice={room.totalPrice}
+                  onAddPackage={() => handleAddRoomPackage(room.id)}
                 />
               ))}
             </div>
@@ -781,9 +1095,7 @@ function MainApp() {
         </section>
 
         {/* Home Staging Section */}
-        <HomeStagingSection onAddToCart={(packageId) => {
-          toast.success("Package added to cart! Feature coming soon.");
-        }} />
+        <HomeStagingSection onAddToCart={handleAddToCart} />
 
         {/* Before/After Showcase */}
         <section id="showcase" className="relative w-full h-screen min-h-[700px] max-h-[1000px] bg-stone-950">
@@ -845,6 +1157,7 @@ function MainApp() {
               {products.map((product) => (
                 <ProductCard
                   key={product.id}
+                  id={product.id}
                   name={product.name}
                   price={product.price}
                   image={product.image}
@@ -856,6 +1169,7 @@ function MainApp() {
                   variants={product.variants}
                   sizes={product.sizes}
                   inStock={product.inStock}
+                  user={user}
                   onAddToCart={(options) => handleAddToCart(product, options)}
                 />
               ))}
@@ -1185,6 +1499,86 @@ function MainApp() {
 
       {/* Design Chatbot */}
       <DesignChatbot onAddToCart={handleAddToCart} />
+
+      {/* Admin Access - CRM Dashboard */}
+      <AdminAccess />
+
+      {/* Supabase Connection Status Indicator */}
+      <SupabaseConnectionStatus />
+
+      {/* Supabase Diagnostics Dialog */}
+      <SupabaseDiagnostics open={isDiagnosticsOpen} onClose={() => setIsDiagnosticsOpen(false)} />
+
+      {/* CRM Data Sync Checker Dialog */}
+      <Dialog open={isSyncCheckerOpen} onOpenChange={setIsSyncCheckerOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogTitle className="sr-only">CRM Data Sync Checker</DialogTitle>
+          <DialogDescription className="sr-only">
+            Check if your CRM data is synced with Supabase
+          </DialogDescription>
+          <CRMDataSyncChecker />
+        </DialogContent>
+      </Dialog>
+
+      {/* Bottom Left Action Buttons */}
+      <div className="fixed bottom-4 left-4 z-50 flex flex-col gap-2">
+        {/* Test Connection Button */}
+        <Button
+          onClick={() => setIsDiagnosticsOpen(true)}
+          variant="outline"
+          size="sm"
+        >
+          <Database className="w-4 h-4 mr-2" />
+          Test Connection
+        </Button>
+
+        {/* Check Data Sync Button */}
+        <Button
+          onClick={() => setIsSyncCheckerOpen(true)}
+          variant="outline"
+          size="sm"
+        >
+          <RefreshCw className="w-4 h-4 mr-2" />
+          Check Data Sync
+        </Button>
+
+        {/* CRM Seed Data Button (for demo purposes) */}
+        <Button
+          onClick={async () => {
+            toast.loading("Seeding CRM data...");
+            const result = await seedCRMData();
+            if (result.success) {
+              toast.success("CRM data seeded successfully! Check the Admin Dashboard.");
+            } else {
+              toast.error("Failed to seed CRM data. Check console for errors.");
+            }
+          }}
+          variant="outline"
+          size="sm"
+        >
+          <Database className="w-4 h-4 mr-2" />
+          Seed Data
+        </Button>
+      </div>
+
+      {/* Campaign Popups */}
+      <CampaignPopup />
+
+      {/* Survey Display */}
+      <SurveyDisplay />
+
+      {/* Mobile Bottom Navigation - shown only below 440px */}
+      <MobileBottomNav
+        currentView={currentView}
+        onNavigateHome={() => setCurrentView("home")}
+        onViewProducts={handleViewProducts}
+        onViewCart={handleViewCart}
+        onViewAccount={handleViewAccount}
+        onViewCustomize={handleViewCustomize}
+        cartItemCount={cart.length}
+        user={user}
+        onSignInClick={() => setIsSignInOpen(true)}
+      />
 
       {/* Toast Notifications */}
       <Toaster position="top-center" />

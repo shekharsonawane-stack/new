@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
@@ -8,6 +8,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/
 import { Separator } from "./ui/separator";
 import { Badge } from "./ui/badge";
 import { Alert, AlertDescription } from "./ui/alert";
+import { createOrder } from "../utils/crm-helpers";
+import { toast } from "sonner@2.0.3";
+import { trackCheckoutStart, trackCheckoutComplete } from "../utils/journey-tracker";
 import { 
   ShoppingBag, 
   Truck, 
@@ -36,11 +39,12 @@ interface CheckoutFlowProps {
   cartItems: CartItem[];
   onCheckoutComplete: (orderNumber: string) => void;
   onClose: () => void;
-  user: { name: string; email: string } | null;
+  user: { name: string; email: string; userId?: string } | null;
   onClearCart?: () => void;
+  onRemoveFromCart?: (itemId: number, itemName: string) => void;
 }
 
-export function CheckoutFlow({ cartItems, onCheckoutComplete, onClose, user, onClearCart }: CheckoutFlowProps) {
+export function CheckoutFlow({ cartItems, onCheckoutComplete, onClose, user, onClearCart, onRemoveFromCart }: CheckoutFlowProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
   const [paymentMethod, setPaymentMethod] = useState<"card" | "bank-transfer" | "fpx" | "financing">("");
@@ -63,6 +67,11 @@ export function CheckoutFlow({ cartItems, onCheckoutComplete, onClose, user, onC
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const deliveryFee = 0; // Free white glove delivery
   const total = subtotal + deliveryFee;
+
+  // Track checkout start when component mounts
+  useEffect(() => {
+    trackCheckoutStart(total, cartItems.length);
+  }, []);
 
   // Available delivery dates (next 4 weeks, excluding past dates and Sundays)
   const getAvailableDates = () => {
@@ -88,15 +97,80 @@ export function CheckoutFlow({ cartItems, onCheckoutComplete, onClose, user, onC
     }
   };
 
-  const handlePlaceOrder = () => {
-    // Generate order number
-    const orderNumber = `VS-2025-${Math.floor(100000 + Math.random() * 900000)}`;
-    setCurrentStep(5);
-    
-    // Call completion handler after showing confirmation
-    setTimeout(() => {
-      onCheckoutComplete(orderNumber);
-    }, 3000);
+  const handlePlaceOrder = async () => {
+    // If user has a userId, create the order in the CRM backend
+    if (user?.userId) {
+      try {
+        console.log("=== ORDER CREATION STARTED ===");
+        console.log("User ID:", user.userId);
+        console.log("Cart items:", cartItems.length);
+        console.log("Total amount:", total);
+        
+        const orderResult = await createOrder({
+          userId: user.userId,
+          items: cartItems.map(item => ({
+            productId: String(item.id),
+            name: item.name,
+            quantity: item.quantity,
+            price: item.price,
+            image: item.image,
+          })),
+          subtotal: subtotal,
+          tax: 0,
+          shipping: deliveryFee,
+          discount: 0,
+          total: total,
+          shippingAddress: {
+            name: deliveryDetails.fullName,
+            street: deliveryDetails.address,
+            city: deliveryDetails.district,
+            state: deliveryDetails.district,
+            postalCode: "",
+            country: "Brunei",
+            phone: deliveryDetails.phone,
+          },
+          paymentMethod: paymentMethod,
+          notes: deliveryDetails.notes,
+        });
+
+        console.log("Order creation result:", orderResult);
+
+        if (orderResult.success && orderResult.orderNumber) {
+          // Track checkout complete
+          trackCheckoutComplete(orderResult.orderNumber, total, paymentMethod);
+          
+          // Show confirmation step
+          setCurrentStep(5);
+          
+          // Call completion handler after showing confirmation
+          setTimeout(() => {
+            onCheckoutComplete(orderResult.orderNumber!);
+          }, 3000);
+          
+          console.log("✅ Order created in CRM successfully!");
+          console.log("Order ID:", orderResult.orderId);
+          console.log("Order Number:", orderResult.orderNumber);
+          toast.success("Order created successfully!");
+        } else {
+          console.error("❌ Order creation failed:", orderResult.error);
+          toast.error(orderResult.error || "Failed to create order. Please try again.");
+        }
+      } catch (error) {
+        console.error("❌ Error creating order:", error);
+        toast.error("An error occurred while creating your order.");
+      }
+    } else {
+      // Fallback for users without userId (demo mode)
+      console.log("⚠️ No userId found - running in demo mode");
+      const orderNumber = `VS-2025-${Math.floor(100000 + Math.random() * 900000)}`;
+      setCurrentStep(5);
+      
+      setTimeout(() => {
+        onCheckoutComplete(orderNumber);
+      }, 3000);
+      
+      toast.info("Demo order created (not saved to database)");
+    }
   };
 
   const canProceedToStep2 = cartItems.length > 0;
@@ -224,7 +298,7 @@ export function CheckoutFlow({ cartItems, onCheckoutComplete, onClose, user, onC
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {cartItems.map((item) => (
-                    <div key={item.id} className="flex gap-4 p-4 rounded-lg border">
+                    <div key={`${item.id}-${item.name}`} className="flex gap-4 p-4 rounded-lg border group relative">
                       <div className="w-24 h-24 rounded-lg overflow-hidden bg-stone-100">
                         <img 
                           src={item.image} 
@@ -237,11 +311,21 @@ export function CheckoutFlow({ cartItems, onCheckoutComplete, onClose, user, onC
                         <p className="text-sm text-muted-foreground mb-2">{item.category}</p>
                         <div className="flex items-center gap-4">
                           <span className="text-sm text-muted-foreground">Qty: {item.quantity}</span>
-                          <span className="font-medium">${item.price.toLocaleString()}</span>
+                          <span className="font-medium">B${item.price.toLocaleString()}</span>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="font-semibold">${(item.price * item.quantity).toLocaleString()}</p>
+                      <div className="text-right flex flex-col items-end justify-between">
+                        <p className="font-semibold">B${(item.price * item.quantity).toLocaleString()}</p>
+                        {onRemoveFromCart && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => onRemoveFromCart(item.id, item.name)}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity h-8 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -405,7 +489,7 @@ export function CheckoutFlow({ cartItems, onCheckoutComplete, onClose, user, onC
                             <Alert className="mt-4 bg-blue-50 border-blue-200">
                               <Info className="h-4 w-4 text-blue-600" />
                               <AlertDescription className="text-blue-900">
-                                Monthly payment: <strong>${Math.ceil(total / 12)}/month</strong> for 12 months. 
+                                Monthly payment: <strong>B${Math.ceil(total / 12)}/month</strong> for 12 months. 
                                 You'll be redirected to BIBD's secure portal to complete your application.
                               </AlertDescription>
                             </Alert>
@@ -413,7 +497,9 @@ export function CheckoutFlow({ cartItems, onCheckoutComplete, onClose, user, onC
                         </div>
                       </div>
 
-                      {/* Credit/Debit Card */}
+                      {/* Credit/Debit Card - TEMPORARILY DISABLED */}
+                      {/* Uncomment after adding STRIPE_SECRET_KEY to Supabase secrets */}
+                      {/*
                       <div className={`relative flex items-start space-x-3 rounded-lg border-2 p-4 cursor-pointer transition-all ${
                         paymentMethod === "card" ? "border-stone-900 bg-stone-50" : "border-stone-200"
                       }`}>
@@ -428,6 +514,7 @@ export function CheckoutFlow({ cartItems, onCheckoutComplete, onClose, user, onC
                           </p>
                         </div>
                       </div>
+                      */}
 
                       {/* FPX */}
                       <div className={`relative flex items-start space-x-3 rounded-lg border-2 p-4 cursor-pointer transition-all ${
@@ -469,72 +556,6 @@ export function CheckoutFlow({ cartItems, onCheckoutComplete, onClose, user, onC
             {/* Step 4: Payment Details */}
             {currentStep === 4 && (
               <div className="space-y-6">
-                {/* Credit/Debit Card Payment */}
-                {paymentMethod === "card" && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <CreditCard className="h-5 w-5" />
-                        Card Payment Details
-                      </CardTitle>
-                      <CardDescription>Enter your card information to complete payment</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="cardNumber">Card Number *</Label>
-                        <Input
-                          id="cardNumber"
-                          value={cardDetails.cardNumber}
-                          onChange={(e) => setCardDetails({ ...cardDetails, cardNumber: formatCardNumber(e.target.value) })}
-                          placeholder="1234 5678 9012 3456"
-                          maxLength={19}
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="cardName">Name on Card *</Label>
-                        <Input
-                          id="cardName"
-                          value={cardDetails.cardName}
-                          onChange={(e) => setCardDetails({ ...cardDetails, cardName: e.target.value.toUpperCase() })}
-                          placeholder="JOHN DOE"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="expiryDate">Expiry Date *</Label>
-                          <Input
-                            id="expiryDate"
-                            value={cardDetails.expiryDate}
-                            onChange={(e) => setCardDetails({ ...cardDetails, expiryDate: formatExpiryDate(e.target.value) })}
-                            placeholder="MM/YY"
-                            maxLength={5}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="cvv">CVV *</Label>
-                          <Input
-                            id="cvv"
-                            type="password"
-                            value={cardDetails.cvv}
-                            onChange={(e) => setCardDetails({ ...cardDetails, cvv: e.target.value.replace(/\D/g, "").substring(0, 3) })}
-                            placeholder="123"
-                            maxLength={3}
-                          />
-                        </div>
-                      </div>
-
-                      <Alert>
-                        <Info className="h-4 w-4" />
-                        <AlertDescription className="text-xs">
-                          Your payment information is encrypted and secure. We never store your full card details.
-                        </AlertDescription>
-                      </Alert>
-                    </CardContent>
-                  </Card>
-                )}
-
                 {/* Bank Transfer */}
                 {paymentMethod === "bank-transfer" && (
                   <Card>
@@ -578,7 +599,7 @@ export function CheckoutFlow({ cartItems, onCheckoutComplete, onClose, user, onC
 
                         <div>
                           <p className="text-sm text-muted-foreground mb-1">Transfer Amount</p>
-                          <p className="text-2xl font-semibold text-green-600">${total.toLocaleString()}</p>
+                          <p className="text-2xl font-semibold text-green-600">B${total.toLocaleString()}</p>
                         </div>
 
                         <Separator />
@@ -629,7 +650,7 @@ export function CheckoutFlow({ cartItems, onCheckoutComplete, onClose, user, onC
                       <Alert>
                         <Info className="h-4 w-4" />
                         <AlertDescription className="text-xs">
-                          You will be redirected to your bank's secure login page to authorize the payment. The payment amount is <strong>${total.toLocaleString()}</strong>
+                          You will be redirected to your bank's secure login page to authorize the payment. The payment amount is <strong>B${total.toLocaleString()}</strong>
                         </AlertDescription>
                       </Alert>
 
@@ -663,9 +684,9 @@ export function CheckoutFlow({ cartItems, onCheckoutComplete, onClose, user, onC
                             <p className="font-semibold">Your Financing Details:</p>
                             <div className="grid grid-cols-2 gap-2 text-sm">
                               <div>Total Amount:</div>
-                              <div className="font-semibold">${total.toLocaleString()}</div>
+                              <div className="font-semibold">B${total.toLocaleString()}</div>
                               <div>Monthly Payment:</div>
-                              <div className="font-semibold">${Math.ceil(total / 12)}/month</div>
+                              <div className="font-semibold">B${Math.ceil(total / 12)}/month</div>
                               <div>Period:</div>
                               <div className="font-semibold">12 months</div>
                               <div>Interest Rate:</div>
@@ -706,6 +727,16 @@ export function CheckoutFlow({ cartItems, onCheckoutComplete, onClose, user, onC
                     </CardContent>
                   </Card>
                 )}
+
+                <Button
+                  className="w-full"
+                  onClick={handlePlaceOrder}
+                  disabled={!canPlaceOrder()}
+                  style={{ display: paymentMethod === "card" ? "none" : "block" }}
+                >
+                  <Package className="h-4 w-4 mr-2" />
+                  Complete Payment
+                </Button>
               </div>
             )}
 
@@ -744,7 +775,7 @@ export function CheckoutFlow({ cartItems, onCheckoutComplete, onClose, user, onC
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Total Amount</span>
-                        <span className="font-semibold">${total.toLocaleString()}</span>
+                        <span className="font-semibold">B${total.toLocaleString()}</span>
                       </div>
                     </div>
                   </div>
@@ -801,7 +832,7 @@ export function CheckoutFlow({ cartItems, onCheckoutComplete, onClose, user, onC
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Subtotal</span>
-                    <span>${subtotal.toLocaleString()}</span>
+                    <span>B${subtotal.toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">White Glove Delivery</span>
@@ -810,7 +841,7 @@ export function CheckoutFlow({ cartItems, onCheckoutComplete, onClose, user, onC
                   <Separator />
                   <div className="flex justify-between font-semibold">
                     <span>Total</span>
-                    <span className="text-xl">${total.toLocaleString()}</span>
+                    <span className="text-xl">B${total.toLocaleString()}</span>
                   </div>
                 </div>
 
@@ -867,6 +898,7 @@ export function CheckoutFlow({ cartItems, onCheckoutComplete, onClose, user, onC
                           className="w-full"
                           onClick={handlePlaceOrder}
                           disabled={!canPlaceOrder()}
+                          style={{ display: paymentMethod === "card" ? "none" : "block" }}
                         >
                           <Package className="h-4 w-4 mr-2" />
                           Complete Payment

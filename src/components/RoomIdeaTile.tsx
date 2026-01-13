@@ -15,10 +15,18 @@ interface RoomIdeaTileProps {
   image: string;
   items: RoomItem[];
   totalPrice: number;
+  onAddPackage?: () => void;
 }
 
-export function RoomIdeaTile({ name, description, image, items, totalPrice }: RoomIdeaTileProps) {
+export function RoomIdeaTile({ name, description, image, items, totalPrice, onAddPackage }: RoomIdeaTileProps) {
   const [isOpen, setIsOpen] = useState(false);
+  
+  const handleAddPackage = () => {
+    if (onAddPackage) {
+      onAddPackage();
+      setIsOpen(false);
+    }
+  };
 
   return (
     <>
@@ -38,7 +46,7 @@ export function RoomIdeaTile({ name, description, image, items, totalPrice }: Ro
           <p className="text-muted-foreground text-sm mb-4">{description}</p>
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground text-sm">{items.length} items</span>
-            <span className="font-semibold">Starting at ${totalPrice.toLocaleString()}</span>
+            <span className="font-semibold">Starting at B${totalPrice.toLocaleString()}</span>
           </div>
         </div>
       </div>
@@ -79,7 +87,7 @@ export function RoomIdeaTile({ name, description, image, items, totalPrice }: Ro
                       </div>
                       <span>{item.name}</span>
                     </div>
-                    <span className="font-medium">${item.price.toLocaleString()}</span>
+                    <span className="font-medium">B${item.price.toLocaleString()}</span>
                   </div>
                 ))}
               </div>
@@ -89,7 +97,7 @@ export function RoomIdeaTile({ name, description, image, items, totalPrice }: Ro
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Complete Set Total</p>
-                  <p className="text-3xl font-semibold">${totalPrice.toLocaleString()}</p>
+                  <p className="text-3xl font-semibold">B${totalPrice.toLocaleString()}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-sm text-muted-foreground">Save 15% when you buy the set</p>
@@ -97,7 +105,7 @@ export function RoomIdeaTile({ name, description, image, items, totalPrice }: Ro
               </div>
               
               <div className="flex gap-3">
-                <Button className="flex-1 gap-2" size="lg">
+                <Button className="flex-1 gap-2" size="lg" onClick={handleAddPackage}>
                   <ShoppingCart className="h-4 w-4" />
                   Add Complete Set
                 </Button>

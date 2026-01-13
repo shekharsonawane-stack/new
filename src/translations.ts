@@ -176,6 +176,15 @@ export interface Translations {
     submit: string;
     save: string;
   };
+  
+  // Mobile Navigation
+  mobileNav: {
+    home: string;
+    products: string;
+    customize: string;
+    cart: string;
+    account: string;
+  };
 }
 
 export const translations: Record<Language, Translations> = {
@@ -336,6 +345,13 @@ export const translations: Record<Language, Translations> = {
       submit: 'Submit',
       save: 'Save',
     },
+    mobileNav: {
+      home: 'Home',
+      products: 'Products',
+      customize: 'Customize',
+      cart: 'Cart',
+      account: 'Account',
+    },
   },
   ms: {
     header: {
@@ -493,6 +509,13 @@ export const translations: Record<Language, Translations> = {
       previous: 'Sebelumnya',
       submit: 'Hantar',
       save: 'Simpan',
+    },
+    mobileNav: {
+      home: 'Rumah',
+      products: 'Produk',
+      customize: 'Sesuaikan',
+      cart: 'Troli',
+      account: 'Akaun',
     },
   },
 };

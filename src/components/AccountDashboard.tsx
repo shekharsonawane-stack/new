@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -20,8 +20,15 @@ import {
   Mail,
   Phone,
   ChevronRight,
-  AlertCircle
+  AlertCircle,
+  Loader2,
+  Heart,
+  Trash2,
+  ShoppingCart
 } from "lucide-react";
+import { projectId, publicAnonKey } from "../utils/supabase/info";
+
+const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-3cbf86a5`;
 
 interface Order {
   id: string;
@@ -262,6 +269,196 @@ const statusConfig = {
 export function AccountDashboard({ user }: AccountDashboardProps) {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isTrackingOpen, setIsTrackingOpen] = useState(false);
+  const [orders, setOrders] = useState<Order[]>(mockOrders);
+  const [loading, setLoading] = useState(true);
+  const [favorites, setFavorites] = useState<any[]>([]);
+  const [loadingFavorites, setLoadingFavorites] = useState(true);
+
+  // Fetch real orders from database
+  useEffect(() => {
+    loadUserOrders();
+    loadFavorites();
+  }, [user.email]);
+
+  const loadFavorites = async () => {
+    try {
+      setLoadingFavorites(true);
+      // Get userId from user object or use email as fallback
+      const userId = (user as any).userId || user.email;
+      const response = await fetch(`${API_BASE}/favorites/${userId}`, {
+        headers: { Authorization: `Bearer ${publicAnonKey}` }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          console.log("✅ Loaded favorites:", data.favorites);
+          setFavorites(data.favorites || []);
+        }
+      }
+    } catch (error) {
+      console.error("Error loading favorites:", error);
+    } finally {
+      setLoadingFavorites(false);
+    }
+  };
+
+  const removeFavorite = async (productId: string) => {
+    try {
+      const userId = (user as any).userId || user.email;
+      const response = await fetch(`${API_BASE}/favorites`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${publicAnonKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ userId, productId })
+      });
+
+      if (response.ok) {
+        setFavorites(favorites.filter(fav => fav.productId !== productId));
+        console.log("💔 Removed favorite:", productId);
+      }
+    } catch (error) {
+      console.error("Error removing favorite:", error);
+    }
+  };
+
+  const loadUserOrders = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_BASE}/users/${encodeURIComponent(user.email)}/orders`, {
+        headers: { Authorization: `Bearer ${publicAnonKey}` }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.orders && data.orders.length > 0) {
+          console.log("✅ Loaded real orders from database:", data.orders);
+          // Transform database orders to match the expected format
+          const transformedOrders = data.orders.map((dbOrder: any) => ({
+            id: dbOrder.id,
+            orderNumber: dbOrder.orderNumber,
+            date: dbOrder.createdAt,
+            total: dbOrder.total,
+            status: mapOrderStatus(dbOrder.status),
+            items: dbOrder.items.map((item: any) => ({
+              name: item.name,
+              quantity: item.quantity,
+              price: item.price,
+              image: item.image || 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=400'
+            })),
+            timeline: dbOrder.timeline || generateDefaultTimeline(dbOrder.status, dbOrder.createdAt),
+            estimatedDelivery: dbOrder.estimatedDelivery || calculateEstimatedDelivery(dbOrder.createdAt),
+            trackingNumber: dbOrder.trackingNumber,
+            documents: generateDocuments(dbOrder.orderNumber, dbOrder.createdAt, dbOrder.paymentMethod)
+          }));
+          setOrders(transformedOrders);
+        } else {
+          console.log("ℹ️ No orders found in database, using mock data");
+          setOrders(mockOrders);
+        }
+      } else {
+        console.log("ℹ️ Failed to fetch orders, using mock data");
+        setOrders(mockOrders);
+      }
+    } catch (error) {
+      console.error("❌ Error loading orders:", error);
+      console.log("ℹ️ Using mock orders in offline mode");
+      setOrders(mockOrders);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Map database order status to UI status
+  const mapOrderStatus = (dbStatus: string): Order['status'] => {
+    const statusMap: Record<string, Order['status']> = {
+      'pending-payment': 'processing',
+      'processing': 'processing',
+      'ready-to-ship': 'ready-to-ship',
+      'in-transit': 'in-transit',
+      'arriving': 'arriving',
+      'out-for-delivery': 'out-for-delivery',
+      'delivered': 'delivered'
+    };
+    return statusMap[dbStatus] || 'processing';
+  };
+
+  // Generate default timeline if not present
+  const generateDefaultTimeline = (status: string, createdAt: string) => {
+    const orderDate = new Date(createdAt);
+    const timeline = [
+      {
+        status: "Order Confirmed",
+        description: "Your order has been confirmed and is being processed",
+        date: createdAt,
+        completed: true
+      }
+    ];
+
+    if (['ready-to-ship', 'in-transit', 'arriving', 'out-for-delivery', 'delivered'].includes(status)) {
+      timeline.push({
+        status: "Items Ready for Shipment",
+        description: "All items packed and ready at warehouse",
+        date: new Date(orderDate.getTime() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        completed: true,
+        location: "Warehouse"
+      });
+    }
+
+    if (['in-transit', 'arriving', 'out-for-delivery', 'delivered'].includes(status)) {
+      timeline.push({
+        status: "In Transit to Brunei",
+        description: "Shipped via freight",
+        date: new Date(orderDate.getTime() + 10 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        completed: true,
+        location: "In Transit"
+      });
+    }
+
+    if (['arriving', 'out-for-delivery', 'delivered'].includes(status)) {
+      timeline.push({
+        status: "Arriving in Brunei",
+        description: "Clearing customs",
+        date: new Date(orderDate.getTime() + 25 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        completed: status === 'delivered',
+        location: "Muara Port, Brunei"
+      });
+    }
+
+    if (['out-for-delivery', 'delivered'].includes(status)) {
+      timeline.push({
+        status: status === 'delivered' ? "Delivered" : "Out for Delivery",
+        description: status === 'delivered' ? "Successfully delivered" : "Items will be delivered to your address",
+        date: new Date(orderDate.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        completed: status === 'delivered',
+        location: "Brunei-Muara District"
+      });
+    }
+
+    return timeline;
+  };
+
+  // Calculate estimated delivery (30 days from order)
+  const calculateEstimatedDelivery = (createdAt: string) => {
+    const orderDate = new Date(createdAt);
+    const deliveryDate = new Date(orderDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+    return deliveryDate.toISOString().split('T')[0];
+  };
+
+  // Generate documents array
+  const generateDocuments = (orderNumber: string, createdAt: string, paymentMethod?: string) => {
+    const docs = [
+      { name: "Order Invoice", type: "invoice" as const, date: createdAt }
+    ];
+    
+    if (paymentMethod === 'BIBD Financing') {
+      docs.push({ name: "Loan Agreement", type: "loan" as const, date: createdAt });
+    }
+    
+    return docs;
+  };
 
   const getOrderProgress = (order: Order) => {
     const completedSteps = order.timeline.filter(t => t.completed).length;
@@ -288,139 +485,254 @@ export function AccountDashboard({ user }: AccountDashboardProps) {
         </div>
 
         <Tabs defaultValue="orders" className="space-y-8">
-          <TabsList className="grid w-full max-w-md grid-cols-3">
+          <TabsList className="grid w-full max-w-2xl grid-cols-4">
             <TabsTrigger value="orders">Orders</TabsTrigger>
+            <TabsTrigger value="favorites">
+              <Heart className="h-4 w-4 mr-2" />
+              Favorites
+            </TabsTrigger>
             <TabsTrigger value="documents">Documents</TabsTrigger>
             <TabsTrigger value="support">Support</TabsTrigger>
           </TabsList>
 
           {/* Orders Tab */}
           <TabsContent value="orders" className="space-y-6">
-            <div className="grid gap-6">
-              {mockOrders.map((order) => {
-                const config = statusConfig[order.status];
-                const StatusIcon = config.icon;
-                
-                return (
-                  <Card key={order.id} className="overflow-hidden">
-                    <CardHeader className="bg-stone-50">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <CardTitle className="text-xl mb-2">Order {order.orderNumber}</CardTitle>
-                          <CardDescription>
-                            Placed on {new Date(order.date).toLocaleDateString('en-US', { 
-                              year: 'numeric', 
-                              month: 'long', 
-                              day: 'numeric' 
-                            })}
-                          </CardDescription>
+            {loading ? (
+              <div className="flex flex-col items-center justify-center py-16 space-y-4">
+                <Loader2 className="h-12 w-12 animate-spin text-muted-foreground" />
+                <p className="text-muted-foreground">Loading your orders...</p>
+              </div>
+            ) : orders.length === 0 ? (
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-16 space-y-4">
+                  <Package className="h-16 w-16 text-muted-foreground/50" />
+                  <div className="text-center">
+                    <h3 className="font-semibold mb-1">No Orders Yet</h3>
+                    <p className="text-muted-foreground">
+                      Your order history will appear here once you make your first purchase.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-6">
+                {orders.map((order) => {
+                  const config = statusConfig[order.status];
+                  const StatusIcon = config.icon;
+                  
+                  return (
+                    <Card key={order.id} className="overflow-hidden">
+                      <CardHeader className="bg-stone-50">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <CardTitle className="text-xl mb-2">Order {order.orderNumber}</CardTitle>
+                            <CardDescription>
+                              Placed on {new Date(order.date).toLocaleDateString('en-US', { 
+                                year: 'numeric', 
+                                month: 'long', 
+                                day: 'numeric' 
+                              })}
+                            </CardDescription>
+                          </div>
+                          <Badge className={`${config.color} text-white border-0`}>
+                            <StatusIcon className="h-3 w-3 mr-1" />
+                            {config.label}
+                          </Badge>
                         </div>
-                        <Badge className={`${config.color} text-white border-0`}>
-                          <StatusIcon className="h-3 w-3 mr-1" />
-                          {config.label}
-                        </Badge>
-                      </div>
-                    </CardHeader>
-                    
-                    <CardContent className="pt-6 space-y-6">
-                      {/* Order Items */}
-                      <div className="space-y-3">
-                        {order.items.map((item, idx) => (
-                          <div key={idx} className="flex items-center gap-4">
-                            <div className="w-16 h-16 rounded-lg overflow-hidden bg-stone-100">
-                              <img 
-                                src={item.image} 
-                                alt={item.name}
-                                className="w-full h-full object-cover"
-                              />
+                      </CardHeader>
+                      
+                      <CardContent className="pt-6 space-y-6">
+                        {/* Order Items */}
+                        <div className="space-y-3">
+                          {order.items.map((item, idx) => (
+                            <div key={idx} className="flex items-center gap-4">
+                              <div className="w-16 h-16 rounded-lg overflow-hidden bg-stone-100">
+                                <img 
+                                  src={item.image} 
+                                  alt={item.name}
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                              <div className="flex-1">
+                                <p className="font-medium">{item.name}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  Qty: {item.quantity} × ${item.price}
+                                </p>
+                              </div>
+                              <p className="font-medium">${item.price * item.quantity}</p>
+                            </div>
+                          ))}
+                        </div>
+
+                        <Separator />
+
+                        {/* Progress Bar */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Order Progress</span>
+                            <span className="font-medium">{Math.round(getOrderProgress(order))}%</span>
+                          </div>
+                          <Progress value={getOrderProgress(order)} className="h-2" />
+                        </div>
+
+                        {/* Current Status */}
+                        <div className="bg-stone-50 rounded-lg p-4">
+                          <div className="flex items-start gap-3">
+                            <div className={`${config.color} text-white p-2 rounded-full`}>
+                              <StatusIcon className="h-4 w-4" />
                             </div>
                             <div className="flex-1">
-                              <p className="font-medium">{item.name}</p>
+                              <p className="font-medium mb-1">
+                                {order.timeline.find(t => !t.completed)?.status || "Delivered"}
+                              </p>
                               <p className="text-sm text-muted-foreground">
-                                Qty: {item.quantity} × ${item.price}
+                                {order.timeline.find(t => !t.completed)?.description || "Your order has been successfully delivered"}
                               </p>
+                              {order.timeline.find(t => !t.completed)?.location && (
+                                <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1">
+                                  <MapPin className="h-3 w-3" />
+                                  {order.timeline.find(t => !t.completed)?.location}
+                                </p>
+                              )}
                             </div>
-                            <p className="font-medium">${item.price * item.quantity}</p>
                           </div>
-                        ))}
-                      </div>
-
-                      <Separator />
-
-                      {/* Progress Bar */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-muted-foreground">Order Progress</span>
-                          <span className="font-medium">{Math.round(getOrderProgress(order))}%</span>
                         </div>
-                        <Progress value={getOrderProgress(order)} className="h-2" />
-                      </div>
 
-                      {/* Current Status */}
-                      <div className="bg-stone-50 rounded-lg p-4">
-                        <div className="flex items-start gap-3">
-                          <div className={`${config.color} text-white p-2 rounded-full`}>
-                            <StatusIcon className="h-4 w-4" />
+                        {/* Estimated Delivery */}
+                        {order.status !== "delivered" && (
+                          <div className="flex items-center justify-between text-sm">
+                            <div className="flex items-center gap-2 text-muted-foreground">
+                              <Clock className="h-4 w-4" />
+                              <span>Estimated Delivery:</span>
+                            </div>
+                            <span className="font-medium">
+                              {new Date(order.estimatedDelivery).toLocaleDateString('en-US', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric'
+                              })}
+                            </span>
                           </div>
-                          <div className="flex-1">
-                            <p className="font-medium mb-1">
-                              {order.timeline.find(t => !t.completed)?.status || "Delivered"}
+                        )}
+
+                        {/* Actions */}
+                        <div className="flex gap-3 pt-2">
+                          <Button 
+                            variant="outline" 
+                            className="flex-1"
+                            onClick={() => handleViewTracking(order)}
+                          >
+                            View Tracking Details
+                            <ChevronRight className="h-4 w-4 ml-1" />
+                          </Button>
+                          <Button variant="outline" size="icon">
+                            <MessageSquare className="h-4 w-4" />
+                          </Button>
+                        </div>
+
+                        {/* Total */}
+                        <div className="flex items-center justify-between pt-4 border-t">
+                          <span className="font-medium">Total Amount</span>
+                          <span className="text-2xl font-semibold">B${order.total.toLocaleString()}</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Favorites Tab */}
+          <TabsContent value="favorites" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Heart className="h-5 w-5 text-red-500" />
+                  My Saved Products
+                </CardTitle>
+                <CardDescription>
+                  Products you've bookmarked for later
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loadingFavorites ? (
+                  <div className="flex flex-col items-center justify-center py-16 space-y-4">
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                    <p className="text-muted-foreground">Loading your favorites...</p>
+                  </div>
+                ) : favorites.length === 0 ? (
+                  <div className="text-center py-16 space-y-4">
+                    <div className="mx-auto w-16 h-16 rounded-full bg-stone-100 flex items-center justify-center">
+                      <Heart className="h-8 w-8 text-stone-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-medium mb-2">No favorites yet</h3>
+                      <p className="text-muted-foreground">
+                        Start browsing and save products you love!
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {favorites.map((favorite) => (
+                      <div key={favorite.productId} className="group relative">
+                        <div className="relative aspect-[4/5] overflow-hidden rounded-2xl bg-muted mb-4">
+                          <img
+                            src={favorite.image}
+                            alt={favorite.productName}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          />
+                          
+                          {/* Category Badge */}
+                          <div className="absolute top-4 left-4">
+                            <span className="bg-white/90 backdrop-blur-sm text-foreground px-3 py-1.5 rounded-full text-xs">
+                              {favorite.category}
+                            </span>
+                          </div>
+
+                          {/* Remove Button */}
+                          <div className="absolute top-4 right-4">
+                            <Button
+                              size="icon"
+                              variant="secondary"
+                              className="h-10 w-10 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={() => removeFavorite(favorite.productId)}
+                            >
+                              <Trash2 className="h-4 w-4 text-red-500" />
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="space-y-3">
+                          {/* Product Info */}
+                          <div>
+                            <h3 className="mb-1.5 font-medium">{favorite.productName}</h3>
+                            <p className="text-muted-foreground text-lg">
+                              B${favorite.price.toLocaleString()}
                             </p>
-                            <p className="text-sm text-muted-foreground">
-                              {order.timeline.find(t => !t.completed)?.description || "Your order has been successfully delivered"}
-                            </p>
-                            {order.timeline.find(t => !t.completed)?.location && (
-                              <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1">
-                                <MapPin className="h-3 w-3" />
-                                {order.timeline.find(t => !t.completed)?.location}
-                              </p>
-                            )}
                           </div>
+
+                          {/* Added Date */}
+                          <p className="text-xs text-muted-foreground">
+                            Added {new Date(favorite.addedAt).toLocaleDateString()}
+                          </p>
+
+                          {/* Action Button */}
+                          <Button
+                            className="w-full gap-2 rounded-full h-11"
+                            size="lg"
+                          >
+                            <ShoppingCart className="h-4 w-4" />
+                            Add to Cart
+                          </Button>
                         </div>
                       </div>
-
-                      {/* Estimated Delivery */}
-                      {order.status !== "delivered" && (
-                        <div className="flex items-center justify-between text-sm">
-                          <div className="flex items-center gap-2 text-muted-foreground">
-                            <Clock className="h-4 w-4" />
-                            <span>Estimated Delivery:</span>
-                          </div>
-                          <span className="font-medium">
-                            {new Date(order.estimatedDelivery).toLocaleDateString('en-US', {
-                              year: 'numeric',
-                              month: 'short',
-                              day: 'numeric'
-                            })}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Actions */}
-                      <div className="flex gap-3 pt-2">
-                        <Button 
-                          variant="outline" 
-                          className="flex-1"
-                          onClick={() => handleViewTracking(order)}
-                        >
-                          View Tracking Details
-                          <ChevronRight className="h-4 w-4 ml-1" />
-                        </Button>
-                        <Button variant="outline" size="icon">
-                          <MessageSquare className="h-4 w-4" />
-                        </Button>
-                      </div>
-
-                      {/* Total */}
-                      <div className="flex items-center justify-between pt-4 border-t">
-                        <span className="font-medium">Total Amount</span>
-                        <span className="text-2xl font-semibold">${order.total.toLocaleString()}</span>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* Documents Tab */}
@@ -434,7 +746,7 @@ export function AccountDashboard({ user }: AccountDashboardProps) {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {mockOrders.flatMap(order => 
+                  {orders.flatMap(order => 
                     order.documents.map((doc, idx) => (
                       <div 
                         key={`${order.id}-${idx}`}

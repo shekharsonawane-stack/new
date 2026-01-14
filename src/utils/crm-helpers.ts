@@ -1,6 +1,4 @@
-import { projectId, publicAnonKey } from "./supabase/info";
-
-const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-3cbf86a5`;
+import { API_BASE, publicAnonKey } from "./supabase/client";
 
 // ============================================
 // LEAD CAPTURE HELPERS

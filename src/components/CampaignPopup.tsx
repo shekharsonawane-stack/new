@@ -1,8 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
-
-const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-3cbf86a5`;
+import { API_BASE, publicAnonKey } from '../utils/supabase/client';
 
 interface PopupCampaign {
   id: string;

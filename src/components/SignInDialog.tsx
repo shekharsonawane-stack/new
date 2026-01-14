@@ -1,16 +1,14 @@
 import { useState } from "react";
+import { Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Separator } from "./ui/separator";
-import { Chrome, Mail, Loader2 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { createUserAccount, trackUserLogin, createLeadFromSignup } from "../utils/crm-helpers";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
-
-const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-3cbf86a5`;
+import { API_BASE, publicAnonKey } from "../utils/supabase/client";
 
 interface SignInDialogProps {
   open: boolean;

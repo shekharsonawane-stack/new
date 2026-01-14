@@ -15,10 +15,8 @@ import {
   Copy,
   Network
 } from "lucide-react";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { API_BASE, publicAnonKey } from "../utils/supabase/client";
 import { CRMSyncArchitectureDiagram } from "./CRMSyncArchitectureDiagram";
-
-const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-3cbf86a5`;
 
 interface SyncCheckResult {
   backend: {

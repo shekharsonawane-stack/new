@@ -5,9 +5,7 @@ import { Badge } from "./ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Alert, AlertDescription } from "./ui/alert";
 import { CheckCircle2, XCircle, AlertCircle, Loader2, Database, Server, Link as LinkIcon } from "lucide-react";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
-
-const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-3cbf86a5`;
+import { API_BASE, publicAnonKey, projectId } from "../utils/supabase/client";
 
 interface EndpointTest {
   name: string;

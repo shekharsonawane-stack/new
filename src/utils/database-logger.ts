@@ -1,9 +1,7 @@
 // Centralized Database Logging System
 // Organizes logs into three separate sections: Journey, User, Order
 
-import { projectId, publicAnonKey } from './supabase/info';
-
-const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-3cbf86a5`;
+import { API_BASE, publicAnonKey } from './supabase/client';
 
 // ============================================
 // JOURNEY LOGS - Analytics & Tracking Events

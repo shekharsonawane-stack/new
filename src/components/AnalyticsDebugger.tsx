@@ -5,9 +5,7 @@ import { Badge } from './ui/badge';
 import { Eye, ShoppingCart, CheckCircle2, RefreshCw, Play } from 'lucide-react';
 import { trackProductView, trackCheckoutComplete, trackAddToCart } from '../utils/journey-tracker';
 import { toast } from 'sonner@2.0.3';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
-
-const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-3cbf86a5`;
+import { API_BASE, publicAnonKey } from '../utils/supabase/client';
 
 export function AnalyticsDebugger() {
   const [analytics, setAnalytics] = useState<any>(null);

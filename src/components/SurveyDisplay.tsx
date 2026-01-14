@@ -4,9 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
 import { toast } from 'sonner';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
-
-const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-3cbf86a5`;
+import { API_BASE, publicAnonKey } from '../utils/supabase/client';
 
 interface Question {
   id: string;

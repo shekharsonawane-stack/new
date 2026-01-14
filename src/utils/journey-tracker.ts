@@ -1,7 +1,8 @@
 // User Journey Tracking System
-import { projectId, publicAnonKey } from './supabase/info';
+import { getApiBase, publicAnonKey, isSupabaseAvailable } from './supabase/client';
 
-const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-3cbf86a5`;
+// Lazy-load API_BASE to avoid build-time execution
+const getAPI_BASE = () => getApiBase();
 
 export interface JourneyEvent {
   eventType: string;
@@ -60,7 +61,7 @@ export const trackEvent = async (
     
     try {
       // New organized logging system
-      const newResponse = await fetch(`${API_BASE}/logs/journey`, {
+      const newResponse = await fetch(`${getAPI_BASE()}/logs/journey`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -83,7 +84,7 @@ export const trackEvent = async (
     
     try {
       // Keep old system for backward compatibility
-      const response = await fetch(`${API_BASE}/analytics/track`, {
+      const response = await fetch(`${getAPI_BASE()}/analytics/track`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

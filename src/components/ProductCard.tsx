@@ -1,14 +1,12 @@
-import { useState, useEffect, useRef } from "react";
-import { ShoppingCart, Heart, Eye, Star, Check } from "lucide-react";
+import { Heart, Loader2, Eye, Star, Check, ShoppingCart } from "lucide-react";
 import { Button } from "./ui/button";
-import { ImageWithFallback } from "./figma/ImageWithFallback";
 import { Badge } from "./ui/badge";
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from "./ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./ui/dialog";
+import { useState, useEffect } from "react";
 import { toast } from "sonner@2.0.3";
+import { API_BASE, publicAnonKey } from "../utils/supabase/client";
+import { ImageWithFallback } from "./figma/ImageWithFallback";
 import { trackProductView } from "../utils/journey-tracker";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
-
-const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-3cbf86a5`;
 
 interface ProductVariant {
   color: string;
